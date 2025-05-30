@@ -1,11 +1,14 @@
+require('dotenv').config(); // Cargar variables desde .env
 const express = require('express');
 const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+
+
 // Inicialización
 const app = express();
 const PORT = 3000;
-
+const url = process.env.URL || `http://localhost`;
 
 const db = new sqlite3.Database('./db.sqlite');
 
@@ -27,7 +30,7 @@ app.get('/horas-reservadas', (req, res) => {
 
 
 
-const server = app.listen(PORT, () => console.log(`Servidor iniciado en http://localhost:${PORT}`));
+const server = app.listen(PORT, () => console.log(`Servidor iniciado en http://${URL}:${PORT}`));
 
 const wss = new WebSocket.Server({ server });
 // DB: Inicialización de tabla y datos
