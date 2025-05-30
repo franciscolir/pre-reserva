@@ -22,7 +22,7 @@
       <input type="text" id="nombre" placeholder="Tu nombre" required />
       <input type="hidden" id="horaSeleccionada" />
       <button type="submit">Reservar</button>
-      <button type="button" onclick="cancelarFormulario()">Cancelar Pre-reserva</button>
+      <button type="button" id="btn-cancelar" onclick="cancelarFormulario()">Cancelar Pre-reserva</button>
     </form>
   </div>
 
@@ -68,22 +68,15 @@
       const btn = document.createElement('button');
       btn.textContent = `${hora} - ${estado}`;
       btn.dataset.hora = hora;
-      btn.disabled = estado !== 'disponible';
+      btn.disabled = estado !== 'disponible' && !(estado === 'pre-reservado' && hora === miHoraPreReservada);
       btn.className = estado.replace('-', '_');
-
-      if (estado === 'pre-reservado') iniciarTemporizador(btn, hora);
 
       btn.onclick = () => {
         const estadoActual = btn.textContent.split(' - ')[1].split(' ')[0];
         const horaSeleccionada = btn.dataset.hora;
 
         if (estadoActual === 'pre-reservado' && horaSeleccionada === miHoraPreReservada) {
-          const confirmar = confirm('¿Deseas cancelar tu pre-reserva?');
-          if (confirmar) {
-            socket.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora: horaSeleccionada }));
-            miHoraPreReservada = null;
-            cancelarFormulario();
-          }
+          mostrarFormulario(horaSeleccionada, true); // Mostrar con botón cancelar
           return;
         }
 
@@ -155,9 +148,11 @@
     }
   }
 
-  function mostrarFormulario(hora) {
+  function mostrarFormulario(hora, mostrarCancelar = false) {
     document.getElementById('formulario').style.display = 'block';
     document.getElementById('horaSeleccionada').value = hora;
+    // Mostrar u ocultar el botón cancelar según corresponda
+    document.getElementById('btn-cancelar').style.display = mostrarCancelar ? 'inline-block' : 'none';
   }
 
   function cancelarFormulario() {
