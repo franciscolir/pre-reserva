@@ -31,181 +31,186 @@
     <ul id="listaReservadas"></ul>
   </div>
 
-  <script>
-    const ws = new WebSocket('ws://localhost:3000');
-    let temporizadores = {};
-    let miHoraPreReservada = null;
+<script>
+  const socket = new WebSocket(`ws://${window.location.host}/ws`);
 
-    ws.onmessage = ({ data }) => {
-      const msg = JSON.parse(data);
-      switch (msg.tipo) {
-        case 'estado_inicial':
-          renderHoras(msg.horas);
-          actualizarHorasReservadas();
-          break;
-        case 'estado_actualizado':
-          actualizarEstado(msg.hora, msg.estado, msg.nombre);
-          actualizarHorasReservadas();
-          break;
-        case 'error':
-          alert(msg.mensaje);
-          break;
-      }
-    };
+  socket.onopen = () => {
+    console.log("🔗 Conectado a WebSocket");
+  };
 
-    function renderHoras(horas) {
-      const contenedor = document.getElementById('horas');
-      contenedor.innerHTML = '';
+  let temporizadores = {};
+  let miHoraPreReservada = null;
 
-      horas.forEach(({ hora, estado }) => {
-        if (estado === 'reservado') return; // No mostrar botón para horas reservadas
-
-        const btn = document.createElement('button');
-        btn.textContent = `${hora} - ${estado}`;
-        btn.dataset.hora = hora;
-        btn.disabled = estado !== 'disponible';
-        btn.className = estado.replace('-', '_');
-
-        if (estado === 'pre-reservado') iniciarTemporizador(btn, hora);
-
-        btn.onclick = () => {
-          const estadoActual = btn.textContent.split(' - ')[1].split(' ')[0];
-          const horaSeleccionada = btn.dataset.hora;
-
-          if (estadoActual === 'pre-reservado' && horaSeleccionada === miHoraPreReservada) {
-            const confirmar = confirm('¿Deseas cancelar tu pre-reserva?');
-            if (confirmar) {
-              ws.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora: horaSeleccionada }));
-              miHoraPreReservada = null;
-              cancelarFormulario();
-            }
-            return;
-          }
-
-          if (miHoraPreReservada) {
-            alert('Solo puedes pre-reservar una hora a la vez.');
-            return;
-          }
-
-          ws.send(JSON.stringify({ tipo: 'pre-reservar', hora: horaSeleccionada }));
-        };
-
-        contenedor.appendChild(btn);
-      });
+  socket.onmessage = ({ data }) => {
+    const msg = JSON.parse(data);
+    switch (msg.tipo) {
+      case 'estado_inicial':
+        renderHoras(msg.horas);
+        actualizarHorasReservadas();
+        break;
+      case 'estado_actualizado':
+        actualizarEstado(msg.hora, msg.estado, msg.nombre);
+        actualizarHorasReservadas();
+        break;
+      case 'error':
+        alert(msg.mensaje);
+        break;
     }
+  };
 
-    function actualizarEstado(hora, estado, nombre = '') {
-      const btn = document.querySelector(`[data-hora="${hora}"]`);
-      if (!btn) return;
+  function renderHoras(horas) {
+    const contenedor = document.getElementById('horas');
+    contenedor.innerHTML = '';
 
-      if (estado === 'reservado') {
-        btn.remove();
-        limpiarTemporizador(hora);
-        if (miHoraPreReservada === hora) miHoraPreReservada = null;
-        cancelarFormulario();
-        return;
-      }
+    horas.forEach(({ hora, estado }) => {
+      if (estado === 'reservado') return; // No mostrar botón para horas reservadas
 
+      const btn = document.createElement('button');
       btn.textContent = `${hora} - ${estado}`;
+      btn.dataset.hora = hora;
       btn.disabled = estado !== 'disponible';
       btn.className = estado.replace('-', '_');
 
-      if (estado === 'pre-reservado') {
-        iniciarTemporizador(btn, hora);
-        if (!miHoraPreReservada || miHoraPreReservada !== hora) {
-          miHoraPreReservada = hora;
-          mostrarFormulario(hora);
-        }
-      } else {
-        limpiarTemporizador(hora);
-        if (estado !== 'pre-reservado' && miHoraPreReservada === hora) {
-          miHoraPreReservada = null;
-        }
-      }
-    }
+      if (estado === 'pre-reservado') iniciarTemporizador(btn, hora);
 
-    function iniciarTemporizador(btn, hora) {
-      let tiempo = 30;
-      limpiarTemporizador(hora);
-      temporizadores[hora] = setInterval(() => {
-        if (tiempo <= 0) {
-          clearInterval(temporizadores[hora]);
-          delete temporizadores[hora];
+      btn.onclick = () => {
+        const estadoActual = btn.textContent.split(' - ')[1].split(' ')[0];
+        const horaSeleccionada = btn.dataset.hora;
 
-          btn.textContent = `${hora} - disponible`;
-          btn.disabled = false;
-          btn.className = '';
-          if (miHoraPreReservada === hora) miHoraPreReservada = null;
-          ws.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora }));
-        } else {
-          btn.textContent = `${hora} - pre-reservado (${tiempo--}s)`;
-        }
-      }, 1000);
-    }
-
-    function limpiarTemporizador(hora) {
-      if (temporizadores[hora]) {
-        clearInterval(temporizadores[hora]);
-        delete temporizadores[hora];
-      }
-    }
-
-    function mostrarFormulario(hora) {
-      document.getElementById('formulario').style.display = 'block';
-      document.getElementById('horaSeleccionada').value = hora;
-    }
-
-    function cancelarFormulario() {
-      const hora = document.getElementById('horaSeleccionada').value;
-      document.getElementById('formulario').style.display = 'none';
-      document.getElementById('nombre').value = '';
-      if (hora) {
-        ws.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora }));
-      }
-    }
-
-    document.getElementById('reserva-form').onsubmit = e => {
-      e.preventDefault();
-
-      const nombre = document.getElementById('nombre').value.trim();
-      const hora = document.getElementById('horaSeleccionada').value;
-
-      if (!nombre) {
-        alert('Por favor ingresa tu nombre.');
-        document.getElementById('nombre').focus();
-        return;
-      }
-
-      ws.send(JSON.stringify({
-        tipo: 'reservar',
-        nombre,
-        hora
-      }));
-
-      cancelarFormulario();
-    };
-
-    // Función para traer y mostrar horas reservadas
-    async function actualizarHorasReservadas() {
-      try {
-        const res = await fetch('http://localhost:3000/horas-reservadas');
-        if (!res.ok) throw new Error('Error al obtener horas reservadas');
-        const horas = await res.json();
-        const lista = document.getElementById('listaReservadas');
-        lista.innerHTML = '';
-        if (horas.length === 0) {
-          lista.innerHTML = '<li>No hay horas reservadas</li>';
+        if (estadoActual === 'pre-reservado' && horaSeleccionada === miHoraPreReservada) {
+          const confirmar = confirm('¿Deseas cancelar tu pre-reserva?');
+          if (confirmar) {
+            socket.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora: horaSeleccionada }));
+            miHoraPreReservada = null;
+            cancelarFormulario();
+          }
           return;
         }
-        horas.forEach(({ hora, nombre }) => {
-          const li = document.createElement('li');
-          li.textContent = `${hora} - Reservado por ${nombre}`;
-          lista.appendChild(li);
-        });
-      } catch (err) {
-        console.error(err);
+
+        if (miHoraPreReservada) {
+          alert('Solo puedes pre-reservar una hora a la vez.');
+          return;
+        }
+
+        socket.send(JSON.stringify({ tipo: 'pre-reservar', hora: horaSeleccionada }));
+      };
+
+      contenedor.appendChild(btn);
+    });
+  }
+
+  function actualizarEstado(hora, estado, nombre = '') {
+    const btn = document.querySelector(`[data-hora="${hora}"]`);
+    if (!btn) return;
+
+    if (estado === 'reservado') {
+      btn.remove();
+      limpiarTemporizador(hora);
+      if (miHoraPreReservada === hora) miHoraPreReservada = null;
+      cancelarFormulario();
+      return;
+    }
+
+    btn.textContent = `${hora} - ${estado}`;
+    btn.disabled = estado !== 'disponible';
+    btn.className = estado.replace('-', '_');
+
+    if (estado === 'pre-reservado') {
+      iniciarTemporizador(btn, hora);
+      if (!miHoraPreReservada || miHoraPreReservada !== hora) {
+        miHoraPreReservada = hora;
+        mostrarFormulario(hora);
+      }
+    } else {
+      limpiarTemporizador(hora);
+      if (estado !== 'pre-reservado' && miHoraPreReservada === hora) {
+        miHoraPreReservada = null;
       }
     }
-  </script>
+  }
+
+  function iniciarTemporizador(btn, hora) {
+    let tiempo = 30;
+    limpiarTemporizador(hora);
+    temporizadores[hora] = setInterval(() => {
+      if (tiempo <= 0) {
+        clearInterval(temporizadores[hora]);
+        delete temporizadores[hora];
+
+        btn.textContent = `${hora} - disponible`;
+        btn.disabled = false;
+        btn.className = '';
+        if (miHoraPreReservada === hora) miHoraPreReservada = null;
+        socket.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora }));
+      } else {
+        btn.textContent = `${hora} - pre-reservado (${tiempo--}s)`;
+      }
+    }, 1000);
+  }
+
+  function limpiarTemporizador(hora) {
+    if (temporizadores[hora]) {
+      clearInterval(temporizadores[hora]);
+      delete temporizadores[hora];
+    }
+  }
+
+  function mostrarFormulario(hora) {
+    document.getElementById('formulario').style.display = 'block';
+    document.getElementById('horaSeleccionada').value = hora;
+  }
+
+  function cancelarFormulario() {
+    const hora = document.getElementById('horaSeleccionada').value;
+    document.getElementById('formulario').style.display = 'none';
+    document.getElementById('nombre').value = '';
+    if (hora) {
+      socket.send(JSON.stringify({ tipo: 'cancelar-pre-reserva', hora }));
+    }
+  }
+
+  document.getElementById('reserva-form').onsubmit = e => {
+    e.preventDefault();
+
+    const nombre = document.getElementById('nombre').value.trim();
+    const hora = document.getElementById('horaSeleccionada').value;
+
+    if (!nombre) {
+      alert('Por favor ingresa tu nombre.');
+      document.getElementById('nombre').focus();
+      return;
+    }
+
+    socket.send(JSON.stringify({
+      tipo: 'reservar',
+      nombre,
+      hora
+    }));
+
+    cancelarFormulario();
+  };
+
+  // Función para traer y mostrar horas reservadas
+  async function actualizarHorasReservadas() {
+    try {
+      const res = await fetch('/horas-reservadas');
+      if (!res.ok) throw new Error('Error al obtener horas reservadas');
+      const horas = await res.json();
+      const lista = document.getElementById('listaReservadas');
+      lista.innerHTML = '';
+      if (horas.length === 0) {
+        lista.innerHTML = '<li>No hay horas reservadas</li>';
+        return;
+      }
+      horas.forEach(({ hora, nombre }) => {
+        const li = document.createElement('li');
+        li.textContent = `${hora} - Reservado por ${nombre}`;
+        lista.appendChild(li);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+</script>
 </body>
 </html>
