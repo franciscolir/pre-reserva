@@ -4,7 +4,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 // Inicialización
 const app = express();
-const PORT = 3000;
+const PORT = 3099;
 
 
 const db = new sqlite3.Database('./db.sqlite');
